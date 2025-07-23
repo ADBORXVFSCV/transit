@@ -3,14 +3,15 @@
 // ignore_for_file: file_names, duplicate_ignore
 
 import 'dart:convert';
+import 'dart:io';
 import 'package:path/path.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LocalDatabase {
-  static const _databaseName = 'transport.db';
-  static const _databaseVersion = 1;
-  static const _password = 'your_secure_password_123!'; // In production, use secure key management
+  static const _databaseName = 'transport_v2.db';
+  static const _databaseVersion = 2;
+  static const _password = 'Ramithu@123'; // In production, use secure key management
 
   static Database? _database;
   static final LocalDatabase _instance = LocalDatabase._internal();
@@ -24,10 +25,38 @@ class LocalDatabase {
     return _database!;
   }
 
-  Future<Database> _initDatabase() async {
-    final path = await getDatabasesPath();
-    final dbPath = join(path, _databaseName);
+Future<Database> _initDatabase() async {
+  final path = await getDatabasesPath();
+  final dbPath = join(path, _databaseName);
 
+  if (await File(dbPath).exists()) {
+    try {
+      return await openDatabase(
+        dbPath,
+        password: _password,
+        version: _databaseVersion,
+        onCreate: _onCreate,
+        onConfigure: (db) async {
+          await db.execute('PRAGMA cipher_memory_security = ON');
+        },
+      );
+    } catch (e) {
+      if (e is DatabaseException && e.toString().contains('password')) {
+        print('Wrong database password, recreating database');
+        await File(dbPath).delete();
+        return await openDatabase(
+          dbPath,
+          password: _password,
+          version: _databaseVersion,
+          onCreate: _onCreate,
+          onConfigure: (db) async {
+            await db.execute('PRAGMA cipher_memory_security = ON');
+          },
+        );
+      }
+      rethrow;
+    }
+  } else {
     return await openDatabase(
       dbPath,
       password: _password,
@@ -38,6 +67,7 @@ class LocalDatabase {
       },
     );
   }
+}
 
   Future<void> _onCreate(Database db, int version) async {
     // Creating tables with indexes for performance
